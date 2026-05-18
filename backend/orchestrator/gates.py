@@ -1,11 +1,17 @@
-from fastapi import FastAPI
+import json
+from datetime import datetime, timezone
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from backend.orchestrator.database import get_db, init_db
 from backend.orchestrator.audit import append_event, get_events
 from backend.agents.specialist import SpecialistAgent
 from backend.agents.skeptic import SkepticAgent
+from backend.agents.planner import PlannerAgent
+from backend.agents.builder import BuilderAgent
+from backend.agents.qa import QAAgent
 from backend.core.confidence import compute_confidence
+from backend.core.models import Understanding, Assumption
 
 
 class RunLoopRequest(BaseModel):
@@ -17,10 +23,69 @@ class ResolveCritiqueRequest(BaseModel):
     resolution: str
 
 
-def create_app(db_path: str | None = None, specialist: SpecialistAgent | None = None,
-               skeptic: SkepticAgent | None = None) -> FastAPI:
+class PlanRequest(BaseModel):
+    understanding_id: str
+
+
+class BuildRequest(BaseModel):
+    plan_id: str
+
+
+class TestRequest(BaseModel):
+    build_id: str
+
+
+class CommitRequest(BaseModel):
+    build_id: str
+    message: str
+
+
+async def _get_understanding(db, understanding_id: str) -> Understanding:
+    cursor = await db.execute(
+        "SELECT payload FROM audit_events WHERE event_type='understanding_generated' AND understanding_id=?",
+        (understanding_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Understanding not found")
+    payload = json.loads(row["payload"])
+    return Understanding(**payload)
+
+
+async def _get_plan(db, plan_id: str):
+    from backend.core.models import TechPlan
+    cursor = await db.execute(
+        "SELECT plan_json FROM tech_plans WHERE id=?",
+        (plan_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return TechPlan.model_validate_json(row["plan_json"])
+
+
+async def _get_plan_for_build(db, build_id: str):
+    cursor = await db.execute(
+        "SELECT plan_id FROM build_artifacts WHERE id=?",
+        (build_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Build not found")
+    return await _get_plan(db, row["plan_id"])
+
+
+def create_app(db_path: str | None = None,
+               specialist: SpecialistAgent | None = None,
+               skeptic: SkepticAgent | None = None,
+               planner: PlannerAgent | None = None,
+               builder: BuilderAgent | None = None,
+               qa: QAAgent | None = None) -> FastAPI:
     _specialist = specialist or SpecialistAgent()
     _skeptic = skeptic or SkepticAgent()
+    _planner = planner or PlannerAgent()
+    _builder = builder or BuilderAgent()
+    _qa = qa or QAAgent()
     _db = None
     _db_path = db_path
 
@@ -81,5 +146,65 @@ def create_app(db_path: str | None = None, specialist: SpecialistAgent | None = 
         db = await get_db_conn()
         events = await get_events(db, limit=limit)
         return {"events": events}
+
+    @app.post("/api/plan")
+    async def create_plan(req: PlanRequest):
+        db = await get_db_conn()
+        understanding = await _get_understanding(db, req.understanding_id)
+        plan = await _planner.generate_plan(understanding)
+        await db.execute(
+            "INSERT INTO tech_plans (id, understanding_id, plan_json, created_at) VALUES (?, ?, ?, ?)",
+            (plan.plan_id, req.understanding_id, plan.model_dump_json(),
+             datetime.now(timezone.utc).isoformat()),
+        )
+        await db.commit()
+        await append_event(db, "plan_created", req.understanding_id, None,
+                           {"plan_id": plan.plan_id})
+        return {"plan": plan.model_dump(), "plan_id": plan.plan_id}
+
+    @app.post("/api/build")
+    async def create_build(req: BuildRequest):
+        db = await get_db_conn()
+        plan = await _get_plan(db, req.plan_id)
+        artifact = await _builder.build(plan)
+        await db.execute(
+            "INSERT INTO build_artifacts (id, plan_id, artifact_json, created_at) VALUES (?, ?, ?, ?)",
+            (artifact.build_id, req.plan_id, artifact.model_dump_json(),
+             datetime.now(timezone.utc).isoformat()),
+        )
+        await db.commit()
+        await append_event(db, "build_completed", None, None,
+                           {"build_id": artifact.build_id, "status": artifact.status})
+        return {"build": artifact.model_dump()}
+
+    @app.post("/api/test")
+    async def run_tests(req: TestRequest):
+        db = await get_db_conn()
+        plan = await _get_plan_for_build(db, req.build_id)
+        test_plan = await _qa.generate_test_plan(plan)
+        report = await _qa.run_tests(req.build_id)
+        await db.execute(
+            "INSERT INTO test_reports (id, build_id, report_json, created_at) VALUES (?, ?, ?, ?)",
+            (report.report_id, req.build_id, report.model_dump_json(),
+             datetime.now(timezone.utc).isoformat()),
+        )
+        await db.commit()
+        await append_event(db, "test_completed", None, None,
+                           {"build_id": req.build_id, "passed": report.passed, "failed": report.failed})
+        return {"test_plan": test_plan.model_dump(), "test_report": report.model_dump()}
+
+    @app.post("/api/commit")
+    async def commit_build(req: CommitRequest):
+        db = await get_db_conn()
+        import subprocess
+        subprocess.run(["git", "add", "-A"], capture_output=True)
+        result = subprocess.run(
+            ["git", "commit", "-m", req.message],
+            capture_output=True, text=True,
+        )
+        sha = result.stdout.strip() if result.returncode == 0 else ""
+        await append_event(db, "commit_created", None, None,
+                           {"build_id": req.build_id, "sha": sha})
+        return {"commit_sha": sha, "success": result.returncode == 0}
 
     return app
