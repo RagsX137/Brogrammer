@@ -24,7 +24,7 @@ dev = [
 include = ["backend", "backend.*", "core", "agents", "orchestrator"]
 
 [project.scripts]
-brogrammer = "backend.cli:run"
+brogrammer = "backend:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

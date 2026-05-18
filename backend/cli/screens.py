@@ -1,10 +1,10 @@
-from textual.app import ComposeResult, Worker, WorkerState
+from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Header, Footer, Button, Static, Input, RichLog
-from textual.containers import Horizontal, Vertical, ScrollableContainer
+from textual.containers import ScrollableContainer
 from textual import work
 
-from backend.cli.widgets import ProgressBar, ConfidenceBadge, GATE_NAMES
+from backend.cli.widgets import ProgressBar, ConfidenceBadge
 from backend.core.confidence import compute_confidence
 
 
