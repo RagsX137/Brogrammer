@@ -349,41 +349,11 @@ class TestBuilderAgent:
     
     @pytest.mark.asyncio
     async def test_builder_file_path_injection(self):
-        """Builder should handle dangerous file paths."""
-        from backend.agents.builder import BuilderAgent
+        """Builder should reject path traversal at model level."""
+        from pydantic import ValidationError
         
-        class PathRecordingSandbox:
-            executed_commands = []
-            async def start(self): return "c1"
-            async def exec(self, cmd):
-                self.executed_commands.append(cmd)
-                return {"stdout": "", "exit_code": 0}
-            async def is_running(self): return True
-        
-        class FakeOllama:
-            async def chat(self, messages, format="", temperature=0.0):
-                return {"message": {"content": "{\\\"test.py\\\": \\\"print(1)\\\"}"}}
-        
-        sandbox = PathRecordingSandbox()
-        agent = BuilderAgent(ollama_client=FakeOllama(), sandbox=sandbox)
-        
-        # Path with dangerous characters
-        plan = TechPlan(
-            understanding_id="u1",
-            tech_stack=["Python"],
-            file_tree=[FileSpec(path="../../../etc/passwd", purpose="evil", content_type="code")],
-            components=[],
-            markdown_summary="#"
-        )
-        
-        try:
-            await agent.build(plan)
-            # Check if dangerous path was passed to sandbox
-            cmds_str = " ".join(sandbox.executed_commands)
-            # The path should be in the commands (sandbox should sanitize, not builder)
-            assert "../../../etc" in cmds_str or "passwd" in cmds_str
-        except Exception:
-            pass  # Exception is also acceptable
+        with pytest.raises(ValidationError):
+            FileSpec(path="../../../etc/passwd", purpose="evil", content_type="code")
 
 
 class TestQAAgent:
@@ -624,8 +594,8 @@ class TestAPIEndpoints:
                 "build_id": "b1",
                 "message": "test commit"
             })
-            # Should not crash - either success or graceful failure
-            assert resp.status_code in [200, 500]
+            # Should not crash - graceful failure (build not found or not a git repo)
+            assert resp.status_code in [200, 400, 404, 500]
 
 
 class TestModelSerialization:
