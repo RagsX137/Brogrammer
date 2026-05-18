@@ -2,11 +2,13 @@ pyproject.toml
 agents/__init__.py
 agents/builder.py
 agents/planner.py
+agents/qa.py
 agents/skeptic.py
 agents/specialist.py
 brogrammer.egg-info/PKG-INFO
 brogrammer.egg-info/SOURCES.txt
 brogrammer.egg-info/dependency_links.txt
+brogrammer.egg-info/entry_points.txt
 brogrammer.egg-info/requires.txt
 brogrammer.egg-info/top_level.txt
 core/__init__.py
