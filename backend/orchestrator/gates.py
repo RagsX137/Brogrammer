@@ -41,8 +41,7 @@ def create_app(db_path: str | None = None, specialist: SpecialistAgent | None = 
 
         await append_event(
             db, "understanding_generated", understanding.id, None,
-            {"goal": req.goal, "assumptions": [a.model_dump() for a in understanding.assumptions],
-             "fragile": fragile},
+            understanding.model_dump(),
         )
 
         critique = await _skeptic.generate_critique(understanding)
