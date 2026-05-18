@@ -81,11 +81,13 @@ def create_app(db_path: str | None = None,
                planner: PlannerAgent | None = None,
                builder: BuilderAgent | None = None,
                qa: QAAgent | None = None) -> FastAPI:
+    from backend.orchestrator.sandbox import SandboxManager
+    shared_sandbox = SandboxManager()
     _specialist = specialist or SpecialistAgent()
     _skeptic = skeptic or SkepticAgent()
     _planner = planner or PlannerAgent()
-    _builder = builder or BuilderAgent()
-    _qa = qa or QAAgent()
+    _builder = builder or BuilderAgent(sandbox=shared_sandbox)
+    _qa = qa or QAAgent(sandbox=shared_sandbox)
     _db = None
     _db_path = db_path
 
