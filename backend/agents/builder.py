@@ -1,4 +1,6 @@
 import json
+import os
+from pathlib import Path
 from backend.core.models import TechPlan, BuildArtifact
 from backend.agents.specialist import OllamaClient
 from backend.orchestrator.sandbox import SandboxManager
@@ -26,10 +28,16 @@ class BuilderAgent:
 
         container_dir = "/workspace"
         for file_spec in plan.file_tree:
-            mkdir_cmd = f"mkdir -p {container_dir}/{file_spec.path.rsplit('/', 1)[0] if '/' in file_spec.path else '.'}"
-            result = await self._exec_with_retry(mkdir_cmd)
-            logs.append(f"$ {mkdir_cmd}")
-            logs.append(result["stdout"])
+            # Use proper path parsing instead of rsplit heuristic
+            file_path = Path(file_spec.path)
+            parent_dir = file_path.parent
+            
+            # Create parent directory if needed
+            if parent_dir != Path('.'):
+                mkdir_cmd = f"mkdir -p {container_dir}/{parent_dir}"
+                result = await self._exec_with_retry(mkdir_cmd)
+                logs.append(f"$ {mkdir_cmd}")
+                logs.append(result["stdout"])
 
             content = await self._generate_file_content(plan, file_spec)
             write_cmd = f"cat > {container_dir}/{file_spec.path} << 'BROGRAMMER_EOF'\n{content}\nBROGRAMMER_EOF"
@@ -38,8 +46,9 @@ class BuilderAgent:
             logs.append(result["stdout"])
             created.append(file_spec.path)
 
+        # Only run pip install if requirements.txt exists
         install_result = await self._exec_with_retry(
-            f"cd {container_dir} && pip install -r requirements.txt 2>/dev/null; echo 'deps done'"
+            f"cd {container_dir} && [ -f requirements.txt ] && pip install -r requirements.txt 2>/dev/null; echo 'deps done'"
         )
         logs.append(install_result["stdout"])
 

@@ -98,6 +98,11 @@ def create_app(db_path: str | None = None,
 
     app = FastAPI()
 
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for monitoring and load balancing."""
+        return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
     @app.post("/api/run-loop")
     async def run_loop(req: RunLoopRequest):
         db = await get_db_conn()
@@ -128,7 +133,7 @@ def create_app(db_path: str | None = None,
         return {
             "understanding": understanding.model_dump(),
             "critique": critique.model_dump(),
-            "confidence": profile.model_dump(),
+            "confidence": profile.model_dup(),
             "critique_resolved": False,
         }
 
