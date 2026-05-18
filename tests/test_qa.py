@@ -2,6 +2,20 @@ import pytest
 from backend.core.models import TechPlan, FileSpec, ComponentSpec, TestReport
 
 
+class FakeQAClient:
+    async def chat(self, messages, format="", temperature=0.0):
+        return {
+            "message": {
+                "content": (
+                    '{"build_id": "", '
+                    '"framework": "pytest", '
+                    '"test_files": [{"path": "tests/test_app.py", "purpose": "Main tests", "content_type": "test"}], '
+                    '"acceptance_criteria": ["all tests pass"]}'
+                )
+            }
+        }
+
+
 class FakeSandbox:
     async def exec(self, command):
         if "pytest" in command:
@@ -17,7 +31,7 @@ class FakeSandbox:
 async def test_qa_generates_test_plan():
     from backend.agents.qa import QAAgent
 
-    agent = QAAgent()
+    agent = QAAgent(ollama_client=FakeQAClient())
     plan = TechPlan(
         understanding_id="u1",
         tech_stack=["Python", "FastAPI"],
