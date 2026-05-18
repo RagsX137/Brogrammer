@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "ollama>=0.1.0",
     "docker>=7.0.0",
+    "textual>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +21,10 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["core", "agents", "orchestrator"]
+include = ["backend", "backend.*", "core", "agents", "orchestrator"]
+
+[project.scripts]
+brogrammer = "backend.cli:run"
 
 [build-system]
 requires = ["setuptools>=68.0"]
