@@ -8,11 +8,18 @@ class SandboxManager:
         self.image = image
         self.workdir = workdir
         self.container_id: str | None = None
-        self._client = docker.from_env()
+        self._client: docker.DockerClient | None = None
+
+    def _get_client(self) -> docker.DockerClient:
+        if self._client is None:
+            self._client = docker.from_env()
+        return self._client
 
     async def start(self) -> str:
+        client = self._get_client()
+
         def _create():
-            container = self._client.containers.run(
+            container = client.containers.run(
                 self.image,
                 command="tail -f /dev/null",
                 detach=True,
@@ -30,8 +37,10 @@ class SandboxManager:
         if not self.container_id:
             raise RuntimeError("Sandbox not started")
 
+        client = self._get_client()
+
         def _exec():
-            container = self._client.containers.get(self.container_id)
+            container = client.containers.get(self.container_id)
             exit_code, output = container.exec_run(
                 ["/bin/sh", "-c", command],
                 demux=True,
@@ -51,9 +60,11 @@ class SandboxManager:
         if not self.container_id:
             return False
 
+        client = self._get_client()
+
         def _check():
             try:
-                container = self._client.containers.get(self.container_id)
+                container = client.containers.get(self.container_id)
                 return container.status == "running"
             except DockerException:
                 return False
@@ -65,13 +76,15 @@ class SandboxManager:
         if not self.container_id:
             return
 
+        client = self._get_client()
+
         def _stop():
             try:
-                container = self._client.containers.get(self.container_id)
+                container = client.containers.get(self.container_id)
                 container.remove(force=True)
             except DockerException:
                 pass
-            self._client.close()
+            client.close()
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _stop)
