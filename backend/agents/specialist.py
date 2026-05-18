@@ -2,7 +2,7 @@ from backend.core.models import Understanding
 
 
 class OllamaClient:
-    def __init__(self, model: str = "qwen3.6:35b", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = "gemma4:latest", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url
 
