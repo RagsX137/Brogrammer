@@ -58,3 +58,24 @@ async def test_event_id_is_unique(db):
     for e in events:
         ids.add(e["id"])
     assert len(ids) == 20
+
+
+@pytest.mark.asyncio
+async def test_tech_plans_table(db):
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tech_plans'")
+    row = await cursor.fetchone()
+    assert row is not None, "tech_plans table should exist"
+
+
+@pytest.mark.asyncio
+async def test_build_artifacts_table(db):
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='build_artifacts'")
+    row = await cursor.fetchone()
+    assert row is not None, "build_artifacts table should exist"
+
+
+@pytest.mark.asyncio
+async def test_test_reports_table(db):
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='test_reports'")
+    row = await cursor.fetchone()
+    assert row is not None, "test_reports table should exist"

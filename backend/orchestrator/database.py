@@ -22,4 +22,28 @@ async def init_db(db: aiosqlite.Connection) -> None:
             created_at TEXT NOT NULL
         )
     """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS tech_plans (
+            id TEXT PRIMARY KEY,
+            understanding_id TEXT NOT NULL,
+            plan_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS build_artifacts (
+            id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            artifact_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS test_reports (
+            id TEXT PRIMARY KEY,
+            build_id TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     await db.commit()
