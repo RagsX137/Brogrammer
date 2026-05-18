@@ -133,7 +133,7 @@ def create_app(db_path: str | None = None,
         return {
             "understanding": understanding.model_dump(),
             "critique": critique.model_dump(),
-            "confidence": profile.model_dup(),
+            "confidence": profile.model_dump(),
             "critique_resolved": False,
         }
 
