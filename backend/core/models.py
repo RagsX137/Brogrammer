@@ -35,7 +35,7 @@ class Understanding(BaseModel):
 
 class SkepticCritique(BaseModel):
     critique_id: str = Field(default_factory=lambda: uuid4().hex[:12])
-    understanding_id: str
+    understanding_id: str = ""
     scenarios: list[str] = []
     questions: list[str] = []
     tool_evidence: list[str] = []
