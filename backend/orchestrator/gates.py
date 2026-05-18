@@ -116,7 +116,7 @@ def create_app(db_path: str | None = None,
             understanding.model_dump(),
         )
 
-        critique = await _skeptic.generate_critique(understanding)
+        critique = await _skeptic.generate_critique(understanding, sandbox=shared_sandbox)
 
         await append_event(
             db, "critique_created", understanding.id, critique.critique_id,

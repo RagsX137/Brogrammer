@@ -29,7 +29,7 @@ class MockSpecialist:
 
 
 class MockSkeptic:
-    async def generate_critique(self, understanding: Understanding) -> SkepticCritique:
+    async def generate_critique(self, understanding: Understanding, sandbox=None) -> SkepticCritique:
         return SkepticCritique(
             understanding_id=understanding.id,
             scenarios=["Could be too complex for MVP"],
