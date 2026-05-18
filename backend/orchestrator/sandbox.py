@@ -34,22 +34,32 @@ class SandboxManager:
             container = self._client.containers.get(self.container_id)
             exit_code, output = container.exec_run(
                 ["/bin/sh", "-c", command],
-                demux=False,
+                demux=True,
             )
-            text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else str(output)
-            return {"stdout": text, "stderr": "", "exit_code": exit_code}
+            if isinstance(output, tuple):
+                stdout = output[0].decode("utf-8", errors="replace") if output[0] else ""
+                stderr = output[1].decode("utf-8", errors="replace") if output[1] else ""
+            else:
+                stdout = str(output)
+                stderr = ""
+            return {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _exec)
 
-    def is_running(self) -> bool:
+    async def is_running(self) -> bool:
         if not self.container_id:
             return False
-        try:
-            container = self._client.containers.get(self.container_id)
-            return container.status == "running"
-        except DockerException:
-            return False
+
+        def _check():
+            try:
+                container = self._client.containers.get(self.container_id)
+                return container.status == "running"
+            except DockerException:
+                return False
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _check)
 
     async def stop(self):
         if not self.container_id:
@@ -61,6 +71,7 @@ class SandboxManager:
                 container.remove(force=True)
             except DockerException:
                 pass
+            self._client.close()
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _stop)
