@@ -315,17 +315,19 @@ async def test_skeptic_react_loop_no_tools_needed():
 
 @pytest.mark.asyncio
 async def test_skeptic_react_loop_fallback_no_sandbox():
-    """When sandbox is None, should use single-round path."""
+    """When sandbox is None, should use single-round path with old prompt (no tool defs)."""
     from backend.agents.skeptic import SkepticAgent
-    agent = SkepticAgent(ollama_client=SkepticReActFakeClient())
+    agent = SkepticAgent(ollama_client=SkepticFakeClient())
     understanding = Understanding(
-        goal="Check API availability",
-        assumptions=[Assumption(statement="API is public")],
-        unknowns=[Unknown(question="What URL?")],
+        goal="Build a habit tracker",
+        assumptions=[Assumption(statement="Users want fireworks")],
+        unknowns=[Unknown(question="What library?")],
         mandatory_categories=MandatoryCategories(),
     )
     critique = await agent.generate_critique(understanding, sandbox=None)
     assert critique.understanding_id == understanding.id
+    assert len(critique.scenarios) == 1
+    assert "6MB" in critique.scenarios[0]
     assert len(critique.tool_evidence) == 0  # No tools without sandbox
 
 
@@ -415,10 +417,16 @@ class SkepticAgent:
     async def generate_critique(
         self, understanding: Understanding, sandbox=None
     ) -> SkepticCritique:
-        messages = [
-            {"role": "system", "content": self.system_prompt + "\n\n" + TOOL_DEFINITIONS},
-            {"role": "user", "content": f"Understanding: {understanding.model_dump_json(indent=2)}"},
-        ]
+        if not sandbox:
+            response = await self.ollama.chat(
+                self._build_initial_messages(understanding), format="json", temperature=0.3,
+            )
+            raw = response["message"]["content"]
+            data = SkepticCritique.model_validate_json(raw)
+            data.understanding_id = understanding.id
+            return data
+
+        messages = self._build_initial_messages(understanding, with_tools=True)
 
         for round_num in range(1, self.MAX_TOOL_ROUNDS + 1):
             response = await self.ollama.chat(messages, format="json", temperature=0.3)
@@ -431,35 +439,21 @@ class SkepticAgent:
                 else:
                     continue
 
-            if output.tool_requests and sandbox:
+            if output.tool_requests:
                 for req in output.tool_requests:
-                    cmd = self._build_command(req)
-                    result = ToolResult(tool=req.tool, args=req.args)
-                    if sandbox and sandbox is not True:
-                        try:
-                            from backend.orchestrator.sandbox import SandboxManager
-                            if hasattr(sandbox, 'install_tools'):
-                                await sandbox.install_tools()
-                            exec_result = await sandbox.exec_safe(cmd)
-                            result.stdout = exec_result.get("stdout", "")
-                            result.stderr = exec_result.get("stderr", "")
-                            result.exit_code = exec_result.get("exit_code", -1)
-                        except Exception as e:
-                            result.stderr = str(e)
-                            result.exit_code = -1
+                    result = await self._execute_tool(req, sandbox)
                     messages.append({
                         "role": "user",
                         "content": f"Tool '{req.tool} {req.args}' result:\n{result.model_dump_json(indent=2)}",
                     })
                 continue
 
-            data = SkepticCritique(
+            return SkepticCritique(
                 understanding_id=understanding.id,
                 scenarios=output.scenarios,
                 questions=output.questions,
                 tool_evidence=output.tool_evidence,
             )
-            return data
 
         return SkepticCritique(
             understanding_id=understanding.id,
@@ -467,6 +461,37 @@ class SkepticAgent:
             questions=["Skeptic loop exhausted without finalizing"],
             tool_evidence=["Max rounds reached"],
         )
+
+    def _build_initial_messages(self, understanding: Understanding, with_tools: bool = False) -> list[dict]:
+        content = self.system_prompt
+        if with_tools:
+            content += "\n\n" + TOOL_DEFINITIONS
+        return [
+            {"role": "system", "content": content},
+            {"role": "user", "content": f"Understanding: {understanding.model_dump_json(indent=2)}"},
+        ]
+
+    @staticmethod
+    def _build_command(req: ToolRequest) -> str:
+        from backend.orchestrator.sandbox import SandboxManager
+        return SandboxManager.build_tool_command(req.tool, req.args)
+
+    async def _execute_tool(self, req: ToolRequest, sandbox) -> ToolResult:
+        result = ToolResult(tool=req.tool, args=req.args)
+        if sandbox is True:
+            return result
+        try:
+            cmd = self._build_command(req)
+            if hasattr(sandbox, 'install_tools'):
+                await sandbox.install_tools()
+            exec_result = await sandbox.exec_safe(cmd)
+            result.stdout = exec_result.get("stdout", "")
+            result.stderr = exec_result.get("stderr", "")
+            result.exit_code = exec_result.get("exit_code", -1)
+        except Exception as e:
+            result.stderr = str(e)
+            result.exit_code = -1
+        return result
 
     @staticmethod
     def _build_command(req: ToolRequest) -> str:
