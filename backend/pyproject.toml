@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",
     "ollama>=0.1.0",
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]
@@ -18,6 +19,9 @@ dev = [
     "aiosqlite>=0.20.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["core", "agents", "orchestrator"]
+
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
