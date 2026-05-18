@@ -3,8 +3,8 @@ from backend.core.models import Understanding, MandatoryCategories, Assumption, 
 
 
 class FakeOllamaClient:
-    def __init__(self, model: str = "llama3.2"):
-        self.model = model
+    def __init__(self):
+        pass
 
     async def chat(self, messages: list[dict], format: str = "", temperature: float = 0.0):
         return {
