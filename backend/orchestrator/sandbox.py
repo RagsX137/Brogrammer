@@ -45,12 +45,8 @@ class SandboxManager:
                 ["/bin/sh", "-c", command],
                 demux=True,
             )
-            if isinstance(output, tuple):
-                stdout = output[0].decode("utf-8", errors="replace") if output[0] else ""
-                stderr = output[1].decode("utf-8", errors="replace") if output[1] else ""
-            else:
-                stdout = str(output)
-                stderr = ""
+            stdout = output[0].decode("utf-8", errors="replace") if output[0] else ""
+            stderr = output[1].decode("utf-8", errors="replace") if output[1] else ""
             return {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
 
         loop = asyncio.get_event_loop()

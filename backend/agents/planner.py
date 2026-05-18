@@ -35,7 +35,7 @@ class PlannerAgent:
                 except json.JSONDecodeError as e:
                     last_error = e
                     if attempt == 2:
-                        raise
+                        raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
             except (ConnectionError, TimeoutError, OSError) as e:
                 # Network/LLLM connection errors - retry
                 last_error = e
