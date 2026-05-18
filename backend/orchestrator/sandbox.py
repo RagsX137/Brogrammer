@@ -1,4 +1,6 @@
 import asyncio
+import shlex
+
 import docker
 from docker.errors import DockerException
 
@@ -136,3 +138,37 @@ class SandboxManager:
                     pass
         except DockerException:
             pass
+
+    TOOLS_INSTALLED_ATTR = "_tools_installed"
+
+    async def install_tools(self) -> None:
+        if getattr(self, self.TOOLS_INSTALLED_ATTR, False):
+            return
+        cmds = [
+            "apt-get update -qq && apt-get install -y -qq curl nodejs npm 2>/dev/null",
+            "pip install duckduckgo-search -q 2>/dev/null",
+        ]
+        for cmd in cmds:
+            await self.exec(cmd)
+        setattr(self, self.TOOLS_INSTALLED_ATTR, True)
+
+    async def exec_safe(self, command: str, timeout: int = 15) -> dict:
+        original_timeout = self.exec_timeout
+        self.exec_timeout = timeout
+        try:
+            return await self.exec(command)
+        finally:
+            self.exec_timeout = original_timeout
+
+    @staticmethod
+    def build_tool_command(tool: str, args: list[str]) -> str:
+        if tool == "curl":
+            url = shlex.quote(args[0]) if args else ""
+            return f"curl -sL --max-time 10 {url}"
+        elif tool == "npm_view":
+            pkg = shlex.quote(args[0]) if args else ""
+            return f"npm view {pkg} --json 2>/dev/null"
+        elif tool == "web_search":
+            query = " ".join(shlex.quote(a) for a in args)
+            return f'python3 -c "from duckduckgo_search import DDGS; print(list(DDGS().text({query}, max_results=5)))"'
+        return ""
