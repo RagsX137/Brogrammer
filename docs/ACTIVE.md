@@ -1,29 +1,25 @@
-# ACTIVE WORKING MEMORY – Phase 1: Full Role Separation
+# ACTIVE WORKING MEMORY – Phase 2: Learning & State-Drift Prevention
 
-> **Phase 1 is COMPLETE.** See MODULES.md for next phase status.
+> **Phase 2 deliverable #1: Skeptic tool access is COMPLETE.**
+> See MODULES.md for full phase status.
 
 ---
 
 ## Phase Goal
 
-Extend Phase 0's dual-agent loop (Specialist ↔ Skeptic) with Planner, Builder, and QA agents,
-Docker sandbox terminal, Git commit workflow, and multi-step gate flow in the frontend.
+Give the SkepticAgent real tool access (curl, npm_view, web_search) via a ReAct loop
+inside the Docker sandbox. Sets the stage for assumption regression checks on commits.
 
 ---
 
 ## Deliverables Complete
 
-- [x] Docker SandboxManager (`backend/orchestrator/sandbox.py`)
-- [x] PlannerAgent (`backend/agents/planner.py`)
-- [x] BuilderAgent (`backend/agents/builder.py`)
-- [x] QAAgent (`backend/agents/qa.py`)
-- [x] Phase 1 data contracts (TechPlan, BuildArtifact, TestPlan, TestReport)
-- [x] Phase 1 DB tables (tech_plans, build_artifacts, test_reports)
-- [x] Full Understanding stored in audit payload for planner reconstruction
-- [x] API endpoints: `/api/plan`, `/api/build`, `/api/test`, `/api/commit`
-- [x] Frontend: TechPlanView, BuildView, TestReportView components
-- [x] Frontend: 7-step gate flow (goal → understanding → design → build → test → commit → done)
-- [x] 79 passing tests (pytest) + TypeScript clean compilation
+- [x] ToolRequest, ToolResult, SkepticOutput data models (core/models.py)
+- [x] Sandbox tool installation + exec_safe + build_tool_command (orchestrator/sandbox.py)
+- [x] SkepticAgent ReAct loop with up to 4 tool rounds (agents/skeptic.py)
+- [x] Sandbox wired into Skeptic via gates.py
+- [x] 128 passing tests (pytest)
+- [x] ReAct loop falls back to single-round when sandbox is None (backward compatible)
 
 ---
 
@@ -31,8 +27,14 @@ Docker sandbox terminal, Git commit workflow, and multi-step gate flow in the fr
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Orchestration pattern | Direct agent calls (same as Phase 0) | Keep it simple, same code style |
-| Builder execution | Headless docker-py exec + streaming logs | Transparent: human sees all commands/output |
-| Planner output | Structured JSON + markdown | Both machines and humans can consume it |
-| QA strategy | Test plans from spec + execution after build | Human approves test plan at gate, sees results at next gate |
-| Git commits | Automatic on prototype gate approval | Agent-authored messages, human reviews before push |
+| Tool loop pattern | ReAct (max 4 rounds) | Adaptive investigation; works with any LLM via JSON-mode parsing |
+| Tool execution | Docker sandbox (SandboxManager.exec) | Already exists from Phase 1, provides isolation |
+| Web search | duckduckgo-search Python library | No API key required, works in sandbox |
+| Sandbox fallback | Old single-round prompt when sandbox=None | Backward compatible, no tool definitions leaked |
+| Frontend changes | None needed | CritiquePanel already renders tool_evidence |
+
+---
+
+## Next Up
+
+- **Assumption regression checks on commits** — Phase 2 deliverable #2
