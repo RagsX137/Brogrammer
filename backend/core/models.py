@@ -127,3 +127,25 @@ class TestReport(BaseModel):
     skipped: int
     coverage_pct: float | None = None
     details: list[TestResult] = []
+
+
+class ToolRequest(BaseModel):
+    tool: Literal["curl", "npm_view", "web_search"]
+    args: list[str] = []
+    description: str = ""
+
+
+class ToolResult(BaseModel):
+    tool: str
+    args: list[str]
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int = 0
+
+
+class SkepticOutput(BaseModel):
+    tool_requests: list[ToolRequest] = []
+    scenarios: list[str] = []
+    questions: list[str] = []
+    tool_evidence: list[str] = []
+    thought: str = ""

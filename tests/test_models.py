@@ -1,4 +1,7 @@
 from datetime import datetime, timezone
+
+import pytest
+
 from backend.core.models import (
     Assumption,
     Unknown,
@@ -6,6 +9,9 @@ from backend.core.models import (
     Understanding,
     SkepticCritique,
     ConfidenceProfile,
+    ToolRequest,
+    ToolResult,
+    SkepticOutput,
 )
 
 
@@ -98,3 +104,42 @@ def test_confidence_profile_fragile():
         fragility_flag=True,
     )
     assert cp.fragility_flag is True
+
+
+def test_tool_request_defaults():
+    tr = ToolRequest(tool="curl", args=["https://example.com"])
+    assert tr.tool == "curl"
+    assert tr.args == ["https://example.com"]
+    assert tr.description == ""
+
+
+def test_tool_request_literal_validation():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ToolRequest(tool="invalid_tool", args=[])
+
+
+def test_tool_result_defaults():
+    tr = ToolResult(tool="curl", args=["https://example.com"])
+    assert tr.tool == "curl"
+    assert tr.stdout == ""
+    assert tr.stderr == ""
+    assert tr.exit_code == 0
+
+
+def test_skeptic_output_forward():
+    so = SkepticOutput(
+        scenarios=["API could be down"],
+        tool_evidence=["curl returned 200"],
+    )
+    assert len(so.scenarios) == 1
+    assert len(so.tool_evidence) == 1
+    assert so.tool_requests == []
+
+
+def test_skeptic_output_with_tool_requests():
+    so = SkepticOutput(
+        tool_requests=[ToolRequest(tool="curl", args=["https://api.example.com"], description="Check endpoint")],
+    )
+    assert len(so.tool_requests) == 1
+    assert so.tool_requests[0].tool == "curl"
