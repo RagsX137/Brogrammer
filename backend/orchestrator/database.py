@@ -1,0 +1,25 @@
+import aiosqlite
+
+DB_PATH = "brogrammer.db"
+
+
+async def get_db(path: str | None = None) -> aiosqlite.Connection:
+    db = await aiosqlite.connect(path or DB_PATH)
+    db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("PRAGMA foreign_keys=ON")
+    return db
+
+
+async def init_db(db: aiosqlite.Connection) -> None:
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            understanding_id TEXT,
+            critique_id TEXT,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    await db.commit()
