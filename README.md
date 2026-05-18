@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/phase-0%20foundation-green?style=for-the-badge" alt="Phase 0" />
-  <img src="https://img.shields.io/badge/tests-29%20passing-brightgreen?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/phase-1%20full%20role%20separation-green?style=for-the-badge" alt="Phase 1" />
+  <img src="https://img.shields.io/badge/tests-79%20passing-brightgreen?style=for-the-badge" alt="Tests" />
   <img src="https://img.shields.io/badge/python-3.11+-blue?style=for-the-badge&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/react-18-61dafb?style=for-the-badge&logo=react" alt="React" />
   <img src="https://img.shields.io/badge/ollama-local%20LLM-000?style=for-the-badge&logo=ollama" alt="Ollama" />
@@ -35,7 +35,7 @@ The result is a multi-agent system where AI accelerates the mechanical parts of 
 
 ## How It Works
 
-### The Dual-Agent Loop
+### The Full Gate Flow
 
 ```
   You describe a goal
@@ -49,18 +49,47 @@ The result is a multi-agent system where AI accelerates the mechanical parts of 
          │                    │
          ▼                    ▼
   ┌──────────────────────────────────┐
-  │        Gate Review (You)         │
+  │    Understanding Gate (You)      │
   │  Red/green tags, toggles, diffs  │
-  │  No walls of text — actionable   │
   └──────────────────────────────────┘
          │
          ▼
-  Mechanical Confidence Score
+  ┌──────────────┐
+  │   Planner    │── Produces TechPlan (JSON + Markdown)
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────────────────────────┐
+  │      Design Gate (You)           │
+  │  Approve/retry the TechPlan      │
+  └──────────────────────────────────┘
+         │
+         ▼
+  ┌──────────────┐     ┌──────────────────┐
+  │   Builder    │────▶│ Docker Sandbox   │
+  │              │◀────│ (execute + test) │
+  └──────┬───────┘     └──────────────────┘
+         │
+         ▼
+  ┌──────────────┐
+  │     QA       │── Runs tests, reports results
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────────────────────────┐
+  │    Prototype Gate (You)          │
+  │  Approve → Git commit            │
+  └──────────────────────────────────┘
 ```
 
-1. **Specialist** — Reads your goal, produces a structured `Understanding` document with assumptions, unknowns, and mandatory category coverage.
-2. **Skeptic** — Takes that Understanding and attacks it. Generates failure scenarios, asks pointed questions, surfaces blind spots.
-3. **You** — Review a visual dashboard with color-coded tags (🟢 validated / 🔴 open), resolution toggles, and a mechanically computed confidence score. No prose overload. No blind approvals.
+1. **Specialist** — Reads your goal, produces a structured `Understanding` document.
+2. **Skeptic** — Takes that Understanding and attacks it. Generates failure scenarios, questions, blind spots.
+3. **You** — Resolve critique at Understanding Gate.
+4. **Planner** — Converts Understanding into a TechPlan with file tree, tech stack, API routes.
+5. **You** — Approve the plan at Design Gate.
+6. **Builder** — Generates code in a Docker sandbox, logs stream to frontend.
+7. **QA** — Runs test suite, reports pass/fail.
+8. **You** — Approve at Prototype Gate → Git commit.
 
 ### Mechanical Confidence
 
@@ -112,24 +141,31 @@ Works with any Ollama-compatible model. Default: `qwen3.6:35b`. Swap via the `OL
 brogrammer/
 ├── backend/
 │   ├── core/
-│   │   ├── models.py          # Pydantic contracts (Understanding, Assumption, SkepticCritique, etc.)
+│   │   ├── models.py          # Pydantic contracts (Understanding, TechPlan, BuildArtifact, etc.)
 │   │   └── confidence.py      # Mechanical confidence formula
 │   ├── agents/
 │   │   ├── specialist.py      # Generates Understanding from a goal
-│   │   └── skeptic.py         # Generates SkepticCritique from Understanding
+│   │   ├── skeptic.py         # Generates SkepticCritique from Understanding
+│   │   ├── planner.py         # Generates TechPlan from Understanding
+│   │   ├── builder.py         # Generates code in Docker sandbox
+│   │   └── qa.py              # Test plan generation and test execution
 │   └── orchestrator/
-│       ├── gates.py           # FastAPI endpoints (/api/run-loop, /api/resolve-critique, /api/audit/events)
+│       ├── gates.py           # FastAPI endpoints (all gates)
+│       ├── sandbox.py         # Docker container management
 │       ├── audit.py           # Append-only SQLite event store
 │       └── database.py        # Async SQLite connection
 ├── frontend/
 │   └── src/
-│       ├── App.tsx            # Main app shell
+│       ├── App.tsx            # Main app shell (7-step gate flow)
 │       ├── api.ts             # FastAPI client
 │       └── components/
 │           ├── UnderstandingView.tsx   # Assumptions + unknowns + mandatory categories
 │           ├── CritiquePanel.tsx       # Skeptic scenarios + resolution toggles
-│           └── ConfidenceBadge.tsx     # Color-coded confidence score
-├── tests/                     # 29 passing tests
+│           ├── ConfidenceBadge.tsx     # Color-coded confidence score
+│           ├── TechPlanView.tsx        # Planner output display
+│           ├── BuildView.tsx           # Streaming build logs
+│           └── TestReportView.tsx      # Test results display
+├── tests/                     # 79 passing tests
 └── docs/
     ├── ARCHITECTURE.md        # System design, agent roles, data contracts
     ├── MODULES.md             # Phase registry + scope fences
@@ -176,7 +212,7 @@ pytest
 | Phase | Name | Status | Focus |
 |-------|------|--------|-------|
 | 0 | **Foundation** | ✅ Complete | Dual-agent loop, mechanical confidence, audit log, gate UI |
-| 1 | **Full Role Separation** | 📋 Planned | Planner, Builder, QA agents; Git workflow; Docker sandbox |
+| 1 | **Full Role Separation** | ✅ Complete | Planner, Builder, QA agents; Git workflow; Docker sandbox |
 | 2 | **Learning & State-Drift Prevention** | 📋 Planned | Assumption regression checks on commits; Skeptic tool use (curl, npm view, web search) |
 | 3 | **Production Hardening** | 📋 Planned | Full CI/CD pipeline, deployment, monitoring |
 

@@ -10,7 +10,7 @@
 | Phase | Name | Status | Key Deliverables |
 |---|---|---|---|
 | 0 | Foundation | ✅ COMPLETE | Dual-agent loop (Specialist↔Skeptic), mechanical confidence scoring, SQLite audit log, bare-bones gate UI |
-| 1 | Full Role Separation | ⬜ PLANNED | Planner, Builder, QA agents; Git workflow integration; Docker sandbox terminal |
+| 1 | Full Role Separation | ✅ COMPLETE | Planner, Builder, QA agents; Git workflow integration; Docker sandbox terminal |
 | 2 | Learning & State-Drift Prevention | ⬜ PLANNED | Assumption regression checks on commits, Skeptic tool access (curl, npm view, web search) |
 | 3 | Production Hardening | ⬜ PLANNED | Full CI/CD pipeline, app store configuration, performance monitoring |
 

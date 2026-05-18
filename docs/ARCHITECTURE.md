@@ -68,6 +68,17 @@ Unknown             { id, question, resolution, resolved_at }
 MandatoryCategories { accessibility, performance, security, state_management, persistence }
 SkepticCritique     { critique_id, understanding_id, scenarios[], questions[], tool_evidence[] }
 ConfidenceProfile   { score, open_unknowns, total_unknowns, validation_ratio, fragility_flag }
+
+### Phase 1 Contracts
+
+TechPlan             { plan_id, understanding_id, tech_stack, file_tree, components, api_routes, markdown_summary }
+FileSpec             { path, purpose, content_type }
+ComponentSpec        { name, responsibility, depends_on }
+APIRoute             { method, path, description }
+BuildArtifact        { build_id, plan_id, files_created, files_modified, docker_logs, status }
+TestPlan             { plan_id, build_id, framework, test_files, acceptance_criteria }
+TestResult           { test_name, status, error_message }
+TestReport           { report_id, build_id, passed, failed, skipped, coverage_pct, details }
 ```
 
 ---

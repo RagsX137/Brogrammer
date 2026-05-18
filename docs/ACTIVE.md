@@ -1,34 +1,38 @@
-# ACTIVE WORKING MEMORY – Phase 0: Foundation
+# ACTIVE WORKING MEMORY – Phase 1: Full Role Separation
 
-> **Phase 0 is COMPLETE.** See MODULES.md for next phase status.
+> **Phase 1 is COMPLETE.** See MODULES.md for next phase status.
 
 ---
 
 ## Phase Goal
 
-Runnable dual-agent text loop (Specialist → Skeptic) with mechanical confidence scoring
-and a bare-bones frontend demonstrating gate UX guardrails (diffs, color tags, toggles).
+Extend Phase 0's dual-agent loop (Specialist ↔ Skeptic) with Planner, Builder, and QA agents,
+Docker sandbox terminal, Git commit workflow, and multi-step gate flow in the frontend.
 
 ---
 
 ## Deliverables Complete
 
-- [x] FastAPI project shell + SQLite (`backend/`)
-- [x] `core/models.py` Pydantic v2 contracts
-- [x] `core/confidence.py` mechanical confidence formula (ignorance paradox, fragility flag)
-- [x] `agents/specialist.py` Specialist agent (Ollama)
-- [x] `agents/skeptic.py` Skeptic agent (Ollama)
-- [x] `orchestrator/database.py` + `audit.py` SQLite append-only audit log
-- [x] `orchestrator/gates.py` FastAPI endpoints (`/api/run-loop`, `/api/resolve-critique`, `/api/audit/events`)
-- [x] `backend/main.py` entry point
-- [x] React (Vite + TypeScript) frontend with UnderstandingView, CritiquePanel, ConfidenceBadge
-- [x] 29 passing tests (pytest) + TypeScript clean compilation
+- [x] Docker SandboxManager (`backend/orchestrator/sandbox.py`)
+- [x] PlannerAgent (`backend/agents/planner.py`)
+- [x] BuilderAgent (`backend/agents/builder.py`)
+- [x] QAAgent (`backend/agents/qa.py`)
+- [x] Phase 1 data contracts (TechPlan, BuildArtifact, TestPlan, TestReport)
+- [x] Phase 1 DB tables (tech_plans, build_artifacts, test_reports)
+- [x] Full Understanding stored in audit payload for planner reconstruction
+- [x] API endpoints: `/api/plan`, `/api/build`, `/api/test`, `/api/commit`
+- [x] Frontend: TechPlanView, BuildView, TestReportView components
+- [x] Frontend: 7-step gate flow (goal → understanding → design → build → test → commit → done)
+- [x] 79 passing tests (pytest) + TypeScript clean compilation
+
+---
 
 ## Key Decisions Made
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| LLM Provider | Local Ollama | Free, offline, no API costs |
-| Frontend Framework | React (Vite + TypeScript) | Mature ecosystem, good for interactive gate UI |
-| LLM Integration | Direct `ollama` Python package | No LiteLLM overhead for Phase 0 |
-| DB Pattern | Lazy init in closure | Avoids lifespan issues with ASGI test transport |
+| Orchestration pattern | Direct agent calls (same as Phase 0) | Keep it simple, same code style |
+| Builder execution | Headless docker-py exec + streaming logs | Transparent: human sees all commands/output |
+| Planner output | Structured JSON + markdown | Both machines and humans can consume it |
+| QA strategy | Test plans from spec + execution after build | Human approves test plan at gate, sees results at next gate |
+| Git commits | Automatic on prototype gate approval | Agent-authored messages, human reviews before push |
