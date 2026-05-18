@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import uuid4
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+import re
 
 
 class Assumption(BaseModel):
@@ -52,7 +54,24 @@ class ConfidenceProfile(BaseModel):
 class FileSpec(BaseModel):
     path: str
     purpose: str
-    content_type: str  # "code" | "config" | "test" | "doc"
+    content_type: Literal["code", "config", "test", "doc", "requirements"]
+    
+    @field_validator('path')
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Validate file path to prevent path traversal and invalid characters."""
+        if not v:
+            raise ValueError('Path cannot be empty')
+        # Check for path traversal
+        if '..' in v:
+            raise ValueError('Path traversal (..) not allowed')
+        # Check for absolute paths
+        if v.startswith('/') or v.startswith('\\'):
+            raise ValueError('Absolute paths not allowed')
+        # Only allow safe characters
+        if not re.match(r'^[a-zA-Z0-9_./\\-]+$', v):
+            raise ValueError('Path contains invalid characters')
+        return v
 
 
 class ComponentSpec(BaseModel):
@@ -62,7 +81,7 @@ class ComponentSpec(BaseModel):
 
 
 class APIRoute(BaseModel):
-    method: str  # GET | POST | PUT | DELETE
+    method: Literal["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
     path: str
     description: str
 
@@ -83,7 +102,7 @@ class BuildArtifact(BaseModel):
     files_created: list[str]
     files_modified: list[str]
     docker_logs: list[str]
-    status: str  # "success" | "failed"
+    status: Literal["success", "failed", "running"]
 
 
 class TestPlan(BaseModel):
@@ -96,7 +115,7 @@ class TestPlan(BaseModel):
 
 class TestResult(BaseModel):
     test_name: str
-    status: str  # "passed" | "failed" | "skipped"
+    status: Literal["passed", "failed", "skipped"]
     error_message: str | None = None
 
 

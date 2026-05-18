@@ -55,7 +55,7 @@ async def test_sandbox_state():
 
     await mgr.start()
     assert mgr.container_id is not None
-    assert mgr.is_running() is True
+    assert await mgr.is_running() is True
 
     await mgr.stop()
-    assert mgr.is_running() is False
+    assert await mgr.is_running() is False

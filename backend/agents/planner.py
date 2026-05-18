@@ -23,15 +23,28 @@ class PlannerAgent:
             {"role": "user", "content": f"Understanding: {understanding.model_dump_json(indent=2)}"},
         ]
 
+        last_error = None
         for attempt in range(3):
-            response = await self.ollama.chat(messages, format="json", temperature=0.2)
-            raw = response["message"]["content"]
             try:
-                data = json.loads(raw)
-                data["understanding_id"] = understanding.id
-                return TechPlan(**data)
-            except (json.JSONDecodeError, Exception):
+                response = await self.ollama.chat(messages, format="json", temperature=0.2)
+                raw = response["message"]["content"]
+                try:
+                    data = json.loads(raw)
+                    data["understanding_id"] = understanding.id
+                    return TechPlan(**data)
+                except json.JSONDecodeError as e:
+                    last_error = e
+                    if attempt == 2:
+                        raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
+            except (ConnectionError, TimeoutError, OSError) as e:
+                # Network/LLLM connection errors - retry
+                last_error = e
                 if attempt == 2:
-                    raise
+                    raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
+            except Exception as e:
+                # Unexpected errors - retry
+                last_error = e
+                if attempt == 2:
+                    raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
 
-        raise RuntimeError("Planner failed after 3 retries")
+        raise RuntimeError(f"Planner failed after 3 retries: {str(last_error)}")

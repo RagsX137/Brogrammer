@@ -81,11 +81,13 @@ def create_app(db_path: str | None = None,
                planner: PlannerAgent | None = None,
                builder: BuilderAgent | None = None,
                qa: QAAgent | None = None) -> FastAPI:
+    from backend.orchestrator.sandbox import SandboxManager
+    shared_sandbox = SandboxManager()
     _specialist = specialist or SpecialistAgent()
     _skeptic = skeptic or SkepticAgent()
     _planner = planner or PlannerAgent()
-    _builder = builder or BuilderAgent()
-    _qa = qa or QAAgent()
+    _builder = builder or BuilderAgent(sandbox=shared_sandbox)
+    _qa = qa or QAAgent(sandbox=shared_sandbox)
     _db = None
     _db_path = db_path
 
@@ -97,6 +99,11 @@ def create_app(db_path: str | None = None,
         return _db
 
     app = FastAPI()
+
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for monitoring and load balancing."""
+        return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
     @app.post("/api/run-loop")
     async def run_loop(req: RunLoopRequest):
@@ -193,11 +200,39 @@ def create_app(db_path: str | None = None,
                            {"build_id": req.build_id, "passed": report.passed, "failed": report.failed})
         return {"test_plan": test_plan.model_dump(), "test_report": report.model_dump()}
 
+    @app.get("/api/ready")
+    async def ready_check():
+        """Readiness check with database verification."""
+        try:
+            db = await get_db_conn()
+            await db.execute("SELECT 1")
+            return {"status": "ready", "database": "connected", "timestamp": datetime.now(timezone.utc).isoformat()}
+        except Exception as e:
+            return {"status": "not ready", "database": str(e)}, 503
+
     @app.post("/api/commit")
     async def commit_build(req: CommitRequest):
         db = await get_db_conn()
-        import subprocess
-        subprocess.run(["git", "add", "-A"], capture_output=True)
+        import subprocess, os
+
+        git_dir = os.path.join(os.getcwd(), ".git")
+        if not os.path.isdir(git_dir):
+            raise HTTPException(status_code=400, detail="Not a git repository")
+
+        cursor = await db.execute(
+            "SELECT artifact_json FROM build_artifacts WHERE id=?",
+            (req.build_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Build not found")
+
+        build_data = json.loads(row["artifact_json"])
+        artifact_files = build_data.get("files_created", []) + build_data.get("files_modified", [])
+
+        for f in artifact_files:
+            subprocess.run(["git", "add", f], capture_output=True)
+
         result = subprocess.run(
             ["git", "commit", "-m", req.message],
             capture_output=True, text=True,
