@@ -124,3 +124,119 @@ async def test_skeptic_generates_critique():
     assert "6MB" in critique.scenarios[0]
     assert len(critique.questions) == 1
     assert len(critique.tool_evidence) == 1
+
+
+class SkepticReActFakeClient:
+    def __init__(self):
+        self.call_count = 0
+
+    async def chat(self, messages: list[dict], format: str = "", temperature: float = 0.0):
+        self.call_count += 1
+        if self.call_count == 1:
+            content = (
+                '{"tool_requests": [{"tool": "curl", "args": ["https://example.com"], '
+                '"description": "Check endpoint"}], '
+                '"thought": "Need to verify if this API exists"}'
+            )
+        else:
+            content = (
+                '{"scenarios": ["API could be unreachable"], '
+                '"questions": ["Should we add offline fallback?"], '
+                '"tool_evidence": ["curl https://example.com → 200 OK (0.4s)"]}'
+            )
+        return {"message": {"content": content}}
+
+
+class SkepticNoToolFakeClient:
+    async def chat(self, messages: list[dict], format: str = "", temperature: float = 0.0):
+        return {
+            "message": {
+                "content": (
+                    '{"scenarios": ["Users might not like it"], '
+                    '"questions": ["Should we A/B test?"], '
+                    '"tool_evidence": []}'
+                )
+            }
+        }
+
+
+@pytest.mark.asyncio
+async def test_skeptic_react_loop_with_tools():
+    from backend.agents.skeptic import SkepticAgent
+    agent = SkepticAgent(ollama_client=SkepticReActFakeClient())
+    understanding = Understanding(
+        goal="Check API availability",
+        assumptions=[Assumption(statement="API is public")],
+        unknowns=[Unknown(question="What URL?")],
+        mandatory_categories=MandatoryCategories(),
+    )
+    critique = await agent.generate_critique(understanding, sandbox=True)
+    assert critique.understanding_id == understanding.id
+    assert len(critique.tool_evidence) == 1
+    assert "curl" in critique.tool_evidence[0]
+
+
+@pytest.mark.asyncio
+async def test_skeptic_react_loop_no_tools_needed():
+    from backend.agents.skeptic import SkepticAgent
+    agent = SkepticAgent(ollama_client=SkepticNoToolFakeClient())
+    understanding = Understanding(
+        goal="Simple app",
+        assumptions=[Assumption(statement="It works")],
+        unknowns=[],
+        mandatory_categories=MandatoryCategories(),
+    )
+    critique = await agent.generate_critique(understanding, sandbox=True)
+    assert len(critique.scenarios) == 1
+    assert len(critique.tool_evidence) == 0
+
+
+@pytest.mark.asyncio
+async def test_skeptic_react_loop_fallback_no_sandbox():
+    """When sandbox is None, should use single-round path with old prompt (no tool defs)."""
+    from backend.agents.skeptic import SkepticAgent
+    agent = SkepticAgent(ollama_client=SkepticFakeClient())
+    understanding = Understanding(
+        goal="Build a habit tracker",
+        assumptions=[Assumption(statement="Users want fireworks")],
+        unknowns=[Unknown(question="What library?")],
+        mandatory_categories=MandatoryCategories(),
+    )
+    critique = await agent.generate_critique(understanding, sandbox=None)
+    assert critique.understanding_id == understanding.id
+    assert len(critique.scenarios) == 1
+    assert "6MB" in critique.scenarios[0]
+    assert len(critique.tool_evidence) == 1
+
+
+@pytest.mark.asyncio
+async def test_skeptic_react_loop_exhausted():
+    """After max tool-request rounds, should force-finalize."""
+    from backend.agents.skeptic import SkepticAgent
+
+    class AlwaysRequestTool:
+        def __init__(self):
+            self.call_count = 0
+
+        async def chat(self, messages, format="", temperature=0.0):
+            self.call_count += 1
+            return {
+                "message": {
+                    "content": (
+                        '{"tool_requests": [{"tool": "curl", "args": ["https://example.com"], '
+                        '"description": "Keep checking"}], '
+                        '"thought": "Still investigating"}'
+                    )
+                }
+            }
+
+    agent = SkepticAgent(ollama_client=AlwaysRequestTool())
+    understanding = Understanding(
+        goal="Test",
+        assumptions=[],
+        unknowns=[],
+        mandatory_categories=MandatoryCategories(),
+    )
+    critique = await agent.generate_critique(understanding, sandbox="mock")
+    assert critique is not None
+    assert len(critique.scenarios) == 0
