@@ -1,6 +1,8 @@
 import aiosqlite
 
-DB_PATH = "brogrammer.db"
+from backend.core import config
+
+DB_PATH = config.get("BROGRAMMER_DB_PATH", "brogrammer.db")
 
 
 async def get_db(path: str | None = None) -> aiosqlite.Connection:

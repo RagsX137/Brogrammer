@@ -7,3 +7,8 @@ brogrammer.db
 .venv/
 *.db-shm
 *.db-wal
+
+# Local secrets / runtime config
+.env
+.env.local
+.env.*.local

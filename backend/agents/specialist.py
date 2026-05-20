@@ -1,10 +1,11 @@
 from backend.core.models import Understanding
+from backend.core import config
 
 
 class OllamaClient:
-    def __init__(self, model: str = "gemma4:latest", base_url: str = "http://localhost:11434"):
-        self.model = model
-        self.base_url = base_url
+    def __init__(self, model: str | None = None, base_url: str | None = None):
+        self.model = model or config.get("OLLAMA_MODEL", "gemma4:latest")
+        self.base_url = base_url or config.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
     async def chat(self, messages: list[dict], format: str = "", temperature: float = 0.0):
         import ollama

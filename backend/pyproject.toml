@@ -10,6 +10,7 @@ dependencies = [
     "ollama>=0.1.0",
     "docker>=7.0.0",
     "textual>=1.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

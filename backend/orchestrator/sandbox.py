@@ -4,16 +4,18 @@ import shlex
 import docker
 from docker.errors import DockerException
 
+from backend.core import config
+
 
 class SandboxManager:
     LABEL_KEY = "brogrammer.build"
     LABEL_VALUE = "true"
 
-    def __init__(self, image: str = "python:3.11-slim", workdir: str = "/workspace",
-                 exec_timeout: int = 120):
-        self.image = image
-        self.workdir = workdir
-        self.exec_timeout = exec_timeout
+    def __init__(self, image: str | None = None, workdir: str | None = None,
+                 exec_timeout: int | None = None):
+        self.image = image or config.get("SANDBOX_IMAGE", "python:3.11-slim")
+        self.workdir = workdir or config.get("SANDBOX_WORKDIR", "/workspace")
+        self.exec_timeout = exec_timeout if exec_timeout is not None else config.get_int("SANDBOX_EXEC_TIMEOUT", 120)
         self.container_id: str | None = None
         self._client: docker.DockerClient | None = None
 
