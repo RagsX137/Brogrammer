@@ -117,3 +117,69 @@ score = max(0, 1 - (open_unknowns / total_unknowns_identified_at_start))
 3. Every gate requires **explicit human approval** before agents proceed
 4. Mandatory categories must be non-empty or confidence score is penalized
 5. The Skeptic investigates its own doubts with tools **before** escalating to human
+
+---
+
+## Failure Modes and Degradation
+
+This section is the on-call runbook. Every known failure mode, its symptom, and the expected system behaviour.
+
+### LLM returns malformed JSON
+- **Symptom:** `RuntimeError: {agent} failed after 3 retries` in logs; API returns 502
+- **Where:** All agents (`SpecialistAgent`, `SkepticAgent`, `PlannerAgent`, `BuilderAgent`, `QAAgent`) wrap LLM calls with `@with_retries(retries=3)`
+- **Behaviour:** Retries up to 3 times on `json.JSONDecodeError`, `ValidationError`, `ConnectionError`, `TimeoutError`, `OSError`. After exhaustion, the error propagates to the orchestrator which returns HTTP 502 with the agent's error message.
+- **Recovery:** Retry the request. If persistent, check Ollama health (`ollama ps`) and model availability.
+
+### Docker not running
+- **Symptom:** `/api/build` or `/api/test` returns HTTP 503 with hint about Docker
+- **Where:** `SandboxManager._ensure_connected()` calls `client.ping()`; Docker SDK raises `DockerException` on connection failure
+- **Behaviour:** Build endpoints fail fast with a 503 and message: "Docker sandbox failed to start..."
+- **Recovery:** Run `docker ps` to verify Docker is running. Run `docker pull python:3.11-slim`.
+
+### Ollama unreachable
+- **Symptom:** First LLM call in any endpoint times out or returns connection refused
+- **Where:** `OllamaClient.chat()` in `specialist.py`
+- **Behaviour:** Agent retries 3 times via `@with_retries`, then raises `RuntimeError` which becomes HTTP 502
+- **Recovery:** Verify Ollama is running: `curl http://localhost:11434/api/tags`. Check `OLLAMA_BASE_URL` in `.env`.
+
+### ReAct loop exhausted
+- **Symptom:** Critique returned with `rounds_used == MAX_TOOL_ROUNDS` (4) and `questions` containing "Skeptic loop exhausted without finalizing"
+- **Where:** `SkepticAgent.generate_critique()` sandbox path
+- **Behaviour:** Returns a critique with empty `scenarios` and a single `questions` entry explaining the exhaustion
+- **Recovery:** Run again; the LLM may produce parseable output on a retry. If persistent, the goal may be too complex for the model.
+
+### Consecutive JSON parse failures in ReAct loop
+- **Symptom:** Critique returned with `tool_evidence` containing `[round N] LLM returned malformed JSON: ...` and force-finalised after 2 consecutive failures
+- **Where:** `SkepticAgent.generate_critique()` sandbox path
+- **Behaviour:** The loop appends an error message to the LLM context and retries. After 2 consecutive failures, it force-finalises with `rounds_used` set to the current round.
+- **Recovery:** Retry the request. The non-determinism of the LLM may resolve it.
+
+### Sandbox container accumulates
+- **Symptom:** `docker ps` shows many `python:3.11-slim` or `brogrammer/sandbox` containers with label `brogrammer.build=true`
+- **Where:** `SandboxManager` containers not cleaned up after crashes
+- **Behaviour:** Startup and periodic tasks run `cleanup_orphans()` which removes all containers with the label. Default interval is 600s, configurable via `SANDBOX_CLEANUP_INTERVAL`.
+- **Recovery:** Manual: `docker rm -f $(docker ps -aq --filter label=brogrammer.build=true)`.
+
+### Sandbox tools not found
+- **Symptom:** Tool execution returns `ToolResult.stderr` with "command not found" or import error
+- **Where:** `SandboxManager.install_tools()`
+- **Behaviour:** On first tool use, `install_tools` runs `apt-get` and `pip install`. If any verification probe (`which curl`, `which npm`, `python3 -c "import duckduckgo_search"`) fails, it raises `RuntimeError` which is caught by `_execute_tool` and placed in `ToolResult.stderr`.
+- **Recovery:** Build the pre-warmed sandbox image: `bash bin/build-sandbox-image.sh && SANDBOX_IMAGE=brogrammer/sandbox:latest`.
+
+### SSRF attempt blocked
+- **Symptom:** `ValueError: URL host '169.254.169.254' is in the denylist` in logs
+- **Where:** `SandboxManager.validate_url()` in `sandbox.py`
+- **Behaviour:** The curl command is never executed; the error surfaces in `ToolResult.stderr`. Denied ranges: `localhost`, `127.0.0.0/8`, `169.254.0.0/16`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, IPv6 link-local, `metadata.google.internal`.
+- **Recovery:** No action needed—this is protective. If a legitimate external tool needs access to a private host, set `SKEPTIC_CURL_ALLOWLIST` env var.
+
+### Git commit fails
+- **Symptom:** `/api/commit` returns 400 ("No files to commit") or 500 ("git add/commit failed")
+- **Where:** `gates.py:commit_build()`
+- **Behaviour:** Returns HTTP 400 if the build produced no artifacts. Returns HTTP 500 with `git add` or `git commit` stderr if the git operation fails.
+- **Recovery:** Ensure the build completed successfully first. Check that the host working directory (`.brogrammer/builds/<build_id>/`) contains the expected files.
+
+### Frontend hydration fails
+- **Symptom:** Page reload shows blank screen or incorrect step
+- **Where:** `App.tsx` localStorage persistence
+- **Behaviour:** `ErrorBoundary` wraps the app and shows a reload button. Stale localStorage state from a different schema version (v1 vs v2) is silently discarded.
+- **Recovery:** Click "Reload" on the ErrorBoundary overlay, or clear `localStorage` manually (`localStorage.removeItem('brogrammer.flow.v1')` in devtools).

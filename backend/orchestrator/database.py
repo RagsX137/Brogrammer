@@ -50,4 +50,21 @@ async def init_db(db: aiosqlite.Connection) -> None:
         FOREIGN KEY (build_id) REFERENCES build_artifacts(id)
     )
     """)
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS tool_call_events (
+        id TEXT PRIMARY KEY,
+        critique_id TEXT NOT NULL,
+        round INTEGER NOT NULL,
+        tool TEXT NOT NULL,
+        args TEXT NOT NULL,
+        exit_code INTEGER NOT NULL,
+        stdout_excerpt TEXT NOT NULL,
+        stderr_excerpt TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """)
+    await db.execute("""
+    CREATE INDEX IF NOT EXISTS idx_tool_call_events_critique
+    ON tool_call_events(critique_id)
+    """)
     await db.commit()

@@ -24,7 +24,7 @@ class MockSpecialist:
 
 
 class MockSkeptic:
-    async def generate_critique(self, understanding: Understanding, sandbox=None) -> SkepticCritique:
+    async def generate_critique(self, understanding: Understanding, sandbox=None, **kwargs) -> SkepticCritique:
         return SkepticCritique(
             understanding_id=understanding.id,
             scenarios=["Could be too complex for MVP"],
@@ -40,6 +40,7 @@ def app():
         db_path=":memory:",
         specialist=MockSpecialist(),
         skeptic=MockSkeptic(),
+        rate_limit=False,
     )
 
 

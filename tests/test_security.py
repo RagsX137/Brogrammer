@@ -72,9 +72,10 @@ class TestSQLInjection:
         events = await get_events(db, limit=10)
         assert len(events) == 3
         
+        reversed_payloads = list(reversed(malicious_payloads))
         for i, event in enumerate(events):
             data = json.loads(event["payload"])
-            assert data == malicious_payloads[i]
+            assert data == reversed_payloads[i]
         
         await db.close()
     

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock
@@ -29,7 +31,7 @@ class MockSpecialist:
 
 
 class MockSkeptic:
-    async def generate_critique(self, understanding: Understanding, sandbox=None) -> SkepticCritique:
+    async def generate_critique(self, understanding: Understanding, sandbox=None, **kwargs) -> SkepticCritique:
         return SkepticCritique(
             understanding_id=understanding.id,
             scenarios=["Could be too complex for MVP"],
@@ -49,12 +51,20 @@ async def mock_generate_plan(understanding):
 
 
 async def mock_build(plan):
+    from uuid import uuid4
+    build_id = uuid4().hex[:12]
+    host_workdir = tempfile.mkdtemp(prefix="brogrammer_test_")
+    filename = f"test_build_{build_id}.py"
+    with open(os.path.join(host_workdir, filename), "w") as f:
+        f.write("print('hello')")
     return BuildArtifact(
         plan_id=plan.plan_id,
-        files_created=["main.py"],
+        build_id=build_id,
+        files_created=[filename],
         files_modified=[],
         docker_logs=["build ok"],
         status="success",
+        host_workdir=host_workdir,
     )
 
 
@@ -101,6 +111,7 @@ def app():
         planner=mock_planner,
         builder=mock_builder,
         qa=mock_qa,
+        rate_limit=False,
     )
 
 

@@ -1,7 +1,10 @@
+import base64
 import json
+import os
 from pathlib import Path
 from backend.core.models import TechPlan, BuildArtifact
 from backend.agents.specialist import OllamaClient
+from backend.agents._retry import with_retries
 from backend.orchestrator.sandbox import SandboxManager
 
 
@@ -18,8 +21,12 @@ class BuilderAgent:
         )
 
     async def build(self, plan: TechPlan) -> BuildArtifact:
+        build_id_hint = plan.plan_id
+        host_workdir = os.path.join(os.getcwd(), ".brogrammer", "builds", build_id_hint)
+        os.makedirs(host_workdir, exist_ok=True)
+
         if not await self.sandbox.is_running():
-            await self.sandbox.start()
+            await self.sandbox.start(host_workdir=host_workdir)
 
         logs = []
         created = []
@@ -27,11 +34,9 @@ class BuilderAgent:
 
         container_dir = "/workspace"
         for file_spec in plan.file_tree:
-            # Use proper path parsing instead of rsplit heuristic
             file_path = Path(file_spec.path)
             parent_dir = file_path.parent
-            
-            # Create parent directory if needed
+
             if parent_dir != Path('.'):
                 mkdir_cmd = f"mkdir -p {container_dir}/{parent_dir}"
                 result = await self._exec_with_retry(mkdir_cmd)
@@ -39,13 +44,13 @@ class BuilderAgent:
                 logs.append(result["stdout"])
 
             content = await self._generate_file_content(plan, file_spec)
-            write_cmd = f"cat > {container_dir}/{file_spec.path} << 'BROGRAMMER_EOF'\n{content}\nBROGRAMMER_EOF"
+            encoded = base64.b64encode(content.encode()).decode()
+            write_cmd = f"echo '{encoded}' | base64 -d > {container_dir}/{file_spec.path}"
             result = await self._exec_with_retry(write_cmd)
             logs.append(f"$ Writing {file_spec.path}")
             logs.append(result["stdout"])
             created.append(file_spec.path)
 
-        # Only run pip install if requirements.txt exists
         install_result = await self._exec_with_retry(
             f"cd {container_dir} && [ -f requirements.txt ] && pip install -r requirements.txt 2>/dev/null; echo 'deps done'"
         )
@@ -63,6 +68,7 @@ class BuilderAgent:
             files_modified=modified,
             docker_logs=logs,
             status=status,
+            host_workdir=host_workdir,
         )
 
     async def _exec_with_retry(self, command: str, retries: int = 3) -> dict:
@@ -72,6 +78,7 @@ class BuilderAgent:
                 return result
         return result
 
+    @with_retries(retries=3)
     async def _generate_file_content(self, plan: TechPlan, file_spec) -> str:
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -87,8 +94,5 @@ class BuilderAgent:
         ]
         response = await self.ollama.chat(messages, format="json", temperature=0.1)
         raw = response["message"]["content"]
-        try:
-            data = json.loads(raw)
-            return data.get(file_spec.path, "# placeholder")
-        except json.JSONDecodeError:
-            return raw
+        data = json.loads(raw)
+        return data.get(file_spec.path, "# placeholder")

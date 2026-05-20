@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 export interface Assumption {
   id: string;
@@ -73,8 +73,10 @@ export async function resolveCritique(critiqueId: string, resolution: string) {
   return res.json();
 }
 
-export async function getAuditEvents(limit = 50) {
-  const res = await fetch(`${API_BASE}/audit/events?limit=${limit}`);
+export async function getAuditEvents(limit = 50, before?: string) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set('before', before);
+  const res = await fetch(`${API_BASE}/audit/events?${params}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }

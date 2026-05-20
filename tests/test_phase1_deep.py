@@ -338,13 +338,13 @@ class TestBuilderAgent:
             markdown_summary="#"
         )
         
-        # Should handle gracefully (return placeholder or fail)
+        # Should handle gracefully (return placeholder or fail with a clear error)
         try:
             artifact = await agent.build(plan)
             # If it doesn't raise, check it handled gracefully
             assert artifact is not None
-        except json.JSONDecodeError:
-            # Also acceptable - explicit failure
+        except (json.JSONDecodeError, RuntimeError):
+            # Acceptable — explicit failure after retries exhausted
             pass
     
     @pytest.mark.asyncio
@@ -542,7 +542,7 @@ class TestAPIEndpoints:
         from backend.orchestrator.gates import create_app
         from httpx import AsyncClient, ASGITransport
         
-        app = create_app(db_path=":memory:")
+        app = create_app(db_path=":memory:", rate_limit=False)
         transport = ASGITransport(app=app)
         
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -557,7 +557,7 @@ class TestAPIEndpoints:
         from backend.orchestrator.gates import create_app
         from httpx import AsyncClient, ASGITransport
         
-        app = create_app(db_path=":memory:")
+        app = create_app(db_path=":memory:", rate_limit=False)
         transport = ASGITransport(app=app)
         
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -571,7 +571,7 @@ class TestAPIEndpoints:
         from backend.orchestrator.gates import create_app
         from httpx import AsyncClient, ASGITransport
         
-        app = create_app(db_path=":memory:")
+        app = create_app(db_path=":memory:", rate_limit=False)
         transport = ASGITransport(app=app)
         
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -585,7 +585,7 @@ class TestAPIEndpoints:
         from backend.orchestrator.gates import create_app
         from httpx import AsyncClient, ASGITransport
         
-        app = create_app(db_path=":memory:")
+        app = create_app(db_path=":memory:", rate_limit=False)
         transport = ASGITransport(app=app)
         
         async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { runLoop, resolveCritique, createPlan, createBuild, runTests, commitBuild, RunLoopResponse, TechPlan, BuildArtifact, TestReport } from './api';
 import UnderstandingView from './components/UnderstandingView';
 import CritiquePanel from './components/CritiquePanel';
@@ -7,18 +7,73 @@ import TechPlanView from './components/TechPlanView';
 import BuildView from './components/BuildView';
 import TestReportView from './components/TestReportView';
 
+const STORAGE_KEY = 'brogrammer.flow.v1';
+
 type GateStep = 'goal' | 'understanding' | 'design' | 'build' | 'test' | 'commit' | 'done';
 
 function App() {
-  const [step, setStep] = useState<GateStep>('goal');
-  const [goal, setGoal] = useState('');
+  const [step, setStep] = useState<GateStep>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.step || 'goal';
+      }
+    } catch { /* ignore */ }
+    return 'goal';
+  });
+  const [goal, setGoal] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).goal || '';
+    } catch { /* ignore */ }
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RunLoopResponse | null>(null);
-  const [plan, setPlan] = useState<TechPlan | null>(null);
-  const [build, setBuild] = useState<BuildArtifact | null>(null);
-  const [testReport, setTestReport] = useState<TestReport | null>(null);
-  const [commitSha, setCommitSha] = useState<string | null>(null);
+  const [result, setResult] = useState<RunLoopResponse | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).result || null;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [plan, setPlan] = useState<TechPlan | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).plan || null;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [build, setBuild] = useState<BuildArtifact | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).build || null;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [testReport, setTestReport] = useState<TestReport | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).testReport || null;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [commitSha, setCommitSha] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved).commitSha || null;
+    } catch { /* ignore */ }
+    return null;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        step, goal, result, plan, build, testReport, commitSha,
+      }));
+    } catch { /* quota exceeded etc */ }
+  }, [step, goal, result, plan, build, testReport, commitSha]);
 
   const handleRun = async () => {
     if (!goal.trim()) return;
@@ -110,7 +165,9 @@ function App() {
   };
 
   const handleReset = () => {
+    localStorage.removeItem(STORAGE_KEY);
     setStep('goal');
+    setGoal('');
     setResult(null);
     setPlan(null);
     setBuild(null);

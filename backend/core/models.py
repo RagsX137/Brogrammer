@@ -41,6 +41,8 @@ class SkepticCritique(BaseModel):
     scenarios: list[str] = []
     questions: list[str] = []
     tool_evidence: list[str] = []
+    rounds_used: int = 0
+    tool_calls: int = 0
 
 
 class ConfidenceProfile(BaseModel):
@@ -103,6 +105,7 @@ class BuildArtifact(BaseModel):
     files_modified: list[str]
     docker_logs: list[str]
     status: Literal["success", "failed", "running"]
+    host_workdir: str = ""
 
 
 class TestPlan(BaseModel):
@@ -127,12 +130,21 @@ class TestReport(BaseModel):
     skipped: int
     coverage_pct: float | None = None
     details: list[TestResult] = []
+    error_message: str | None = None
 
 
 class ToolRequest(BaseModel):
     tool: Literal["curl", "npm_view", "web_search"]
     args: list[str] = []
     description: str = ""
+
+    @field_validator("args")
+    @classmethod
+    def validate_curl_url(cls, v: list[str], info) -> list[str]:
+        if info.data.get("tool") == "curl" and v:
+            from backend.orchestrator.sandbox import SandboxManager
+            SandboxManager.validate_url(v[0])
+        return v
 
 
 class ToolResult(BaseModel):

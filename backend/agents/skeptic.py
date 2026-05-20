@@ -1,5 +1,6 @@
 from backend.core.models import Understanding, SkepticCritique, ToolRequest, ToolResult, SkepticOutput
 from backend.agents.specialist import OllamaClient
+from backend.agents._retry import with_retries
 
 
 TOOL_DEFINITIONS = """
@@ -35,34 +36,68 @@ class SkepticAgent:
             '"tool_evidence": ["evidence gathered from tools"]}'
         )
 
+    @with_retries(retries=3)
+    async def _generate_no_sandbox(self, understanding: Understanding) -> SkepticCritique:
+        response = await self.ollama.chat(
+            self._build_initial_messages(understanding), format="json", temperature=0.3,
+        )
+        raw = response["message"]["content"]
+        data = SkepticCritique.model_validate_json(raw)
+        data.understanding_id = understanding.id
+        return data
+
     async def generate_critique(
-        self, understanding: Understanding, sandbox=None
+        self, understanding: Understanding, sandbox=None,
+        on_tool_call=None,
     ) -> SkepticCritique:
         if not sandbox:
-            response = await self.ollama.chat(
-                self._build_initial_messages(understanding), format="json", temperature=0.3,
-            )
-            raw = response["message"]["content"]
-            data = SkepticCritique.model_validate_json(raw)
-            data.understanding_id = understanding.id
-            return data
+            return await self._generate_no_sandbox(understanding)
 
         messages = self._build_initial_messages(understanding, with_tools=True)
+        consecutive_failures = 0
+        rounds_used = 0
+        tool_calls = 0
 
         for round_num in range(1, self.MAX_TOOL_ROUNDS + 1):
             response = await self.ollama.chat(messages, format="json", temperature=0.3)
             raw = response["message"]["content"]
             try:
                 output = SkepticOutput.model_validate_json(raw)
-            except Exception:
-                if round_num == self.MAX_TOOL_ROUNDS:
-                    output = SkepticOutput()
-                else:
-                    continue
+                consecutive_failures = 0
+            except Exception as e:
+                consecutive_failures += 1
+                evidence_line = f"[round {round_num}] LLM returned malformed JSON: {raw[:200]}"
+                if consecutive_failures >= 2:
+                    return SkepticCritique(
+                        understanding_id=understanding.id,
+                        scenarios=[],
+                        questions=[f"Skeptic loop finalised after {consecutive_failures} consecutive malformed responses: {evidence_line}"],
+                        tool_evidence=[evidence_line],
+                        rounds_used=round_num,
+                        tool_calls=tool_calls,
+                    )
+                messages.append({
+                    "role": "user",
+                    "content": f"Your previous response was not valid JSON: {evidence_line}. Please respond with valid JSON only."
+                })
+                continue
+
+            rounds_used = round_num
 
             if output.tool_requests:
                 for req in output.tool_requests:
+                    tool_calls += 1
                     result = await self._execute_tool(req, sandbox)
+                    if on_tool_call:
+                        await on_tool_call(
+                            critique_id=None,
+                            round=round_num,
+                            tool=req.tool,
+                            args=req.args,
+                            exit_code=result.exit_code,
+                            stdout=result.stdout,
+                            stderr=result.stderr,
+                        )
                     messages.append({
                         "role": "user",
                         "content": f"Tool '{req.tool} {req.args}' result:\n{result.model_dump_json(indent=2)}",
@@ -74,6 +109,8 @@ class SkepticAgent:
                 scenarios=output.scenarios,
                 questions=output.questions,
                 tool_evidence=output.tool_evidence,
+                rounds_used=rounds_used,
+                tool_calls=tool_calls,
             )
 
         return SkepticCritique(
@@ -81,6 +118,8 @@ class SkepticAgent:
             scenarios=[],
             questions=["Skeptic loop exhausted without finalizing"],
             tool_evidence=["Max rounds reached"],
+            rounds_used=self.MAX_TOOL_ROUNDS,
+            tool_calls=tool_calls,
         )
 
     def _build_initial_messages(self, understanding: Understanding, with_tools: bool = False) -> list[dict]:

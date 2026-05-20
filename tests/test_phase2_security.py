@@ -17,32 +17,40 @@ from backend.orchestrator.gates import (
 class TestInputValidationGaps:
     """Test for missing input validation."""
 
-    def test_empty_goal_allowed(self):
-        """Empty goals should probably be rejected."""
-        req = RunLoopRequest(goal='')
-        assert req.goal == ""  # Currently allowed - potential issue
+    def test_empty_goal_rejected(self):
+        """Empty goals should be rejected."""
+        with pytest.raises(ValidationError):
+            RunLoopRequest(goal='')
 
-    def test_whitespace_only_goal_allowed(self):
-        """Whitespace-only goals should probably be rejected."""
-        req = RunLoopRequest(goal='   ')
-        assert req.goal == '   '  # Currently allowed - potential issue
+    def test_whitespace_only_goal_rejected(self):
+        """Whitespace-only goals should be rejected."""
+        with pytest.raises(ValidationError):
+            RunLoopRequest(goal='   ')
 
-    def test_extremely_long_goal(self):
-        """Very long goals could cause DoS."""
-        long_goal = 'A' * 1000000  # 1MB goal
-        req = RunLoopRequest(goal=long_goal)
-        assert len(req.goal) == 1000000  # No length limit - potential DoS
+    def test_extremely_long_goal_rejected(self):
+        """Very long goals should be rejected (DoS protection)."""
+        with pytest.raises(ValidationError):
+            RunLoopRequest(goal='A' * 1000000)
 
-    def test_commit_message_no_validation(self):
-        """Commit messages have no validation."""
-        req = CommitRequest(build_id='b1', message='')
-        assert req.message == ''  # Empty commit allowed
+    def test_goal_exactly_at_limit(self):
+        """Goal at exactly max_length should be accepted."""
+        req = RunLoopRequest(goal='A' * 10000)
+        assert len(req.goal) == 10000
 
-    def test_commit_message_no_length_limit(self):
-        """Very long commit messages could cause issues."""
-        long_msg = 'X' * 100000
-        req = CommitRequest(build_id='b1', message=long_msg)
-        assert len(req.message) == 100000  # No limit - potential issue
+    def test_goal_one_over_limit(self):
+        """Goal one over max_length should be rejected."""
+        with pytest.raises(ValidationError):
+            RunLoopRequest(goal='A' * 10001)
+
+    def test_commit_message_empty_rejected(self):
+        """Empty commit messages should be rejected."""
+        with pytest.raises(ValidationError):
+            CommitRequest(build_id='b1', message='')
+
+    def test_commit_message_long_rejected(self):
+        """Very long commit messages should be rejected."""
+        with pytest.raises(ValidationError):
+            CommitRequest(build_id='b1', message='X' * 100000)
 
 
 class TestPathTraversal:

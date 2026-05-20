@@ -1,6 +1,6 @@
-import json
 from backend.core.models import Understanding, TechPlan
 from backend.agents.specialist import OllamaClient
+from backend.agents._retry import with_retries
 
 
 class PlannerAgent:
@@ -17,34 +17,18 @@ class PlannerAgent:
             '"markdown_summary": "# Plan summary in markdown"}'
         )
 
+    @with_retries(retries=3)
+    async def _call_llm(self, messages: list, understanding_id: str) -> TechPlan:
+        import json
+        response = await self.ollama.chat(messages, format="json", temperature=0.2)
+        raw = response["message"]["content"]
+        data = json.loads(raw)
+        data["understanding_id"] = understanding_id
+        return TechPlan.model_validate(data)
+
     async def generate_plan(self, understanding: Understanding) -> TechPlan:
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": f"Understanding: {understanding.model_dump_json(indent=2)}"},
         ]
-
-        last_error = None
-        for attempt in range(3):
-            try:
-                response = await self.ollama.chat(messages, format="json", temperature=0.2)
-                raw = response["message"]["content"]
-                try:
-                    data = json.loads(raw)
-                    data["understanding_id"] = understanding.id
-                    return TechPlan(**data)
-                except json.JSONDecodeError as e:
-                    last_error = e
-                    if attempt == 2:
-                        raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
-            except (ConnectionError, TimeoutError, OSError) as e:
-                # Network/LLLM connection errors - retry
-                last_error = e
-                if attempt == 2:
-                    raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
-            except Exception as e:
-                # Unexpected errors - retry
-                last_error = e
-                if attempt == 2:
-                    raise RuntimeError(f"Planner failed after 3 retries: {str(e)}") from e
-
-        raise RuntimeError(f"Planner failed after 3 retries: {str(last_error)}")
+        return await self._call_llm(messages, understanding.id)

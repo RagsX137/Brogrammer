@@ -1,5 +1,6 @@
 from backend.core.models import Understanding
 from backend.core import config
+from backend.agents._retry import with_retries
 
 
 class OllamaClient:
@@ -29,6 +30,7 @@ class SpecialistAgent:
             '"security": [...], "state_management": [...], "persistence": [...]}}'
         )
 
+    @with_retries(retries=3)
     async def generate_understanding(self, goal: str) -> Understanding:
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -38,6 +40,7 @@ class SpecialistAgent:
         raw = response["message"]["content"]
         return Understanding.model_validate_json(raw)
 
+    @with_retries(retries=3)
     async def _single_understanding(self, goal: str, temperature: float) -> set[str]:
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -51,11 +54,10 @@ class SpecialistAgent:
     async def generate_with_fragility_check(self, goal: str) -> tuple[Understanding, bool]:
         result = await self.generate_understanding(goal)
 
-        sets = []
-        for _ in range(3):
-            s = await self._single_understanding(goal, temperature=0.7)
-            sets.append(s)
+        try:
+            resample = await self._single_understanding(goal, temperature=0.7)
+            fragile = resample != {a.statement for a in result.assumptions}
+        except RuntimeError:
+            fragile = True
 
-        first_set = sets[0]
-        fragile = any(s != first_set for s in sets[1:])
         return result, fragile

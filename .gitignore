@@ -8,6 +8,9 @@ brogrammer.db
 *.db-shm
 *.db-wal
 
+# Build artifacts
+.brogrammer/
+
 # Local secrets / runtime config
 .env
 .env.local
